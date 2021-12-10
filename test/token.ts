@@ -118,7 +118,7 @@ describe("Token contract", function (){
 
         it("the mint fails because the address doesn't have the role of a minter", async function () {
             await expect(token.connect(addr1).mint(addr2.address, parseEther('200'))
-                ).to.be.revertedWith("AlluoToken: must have minter role to mint");
+                ).to.be.revertedWith("AlluoToken: must have minter role");
         });
 
         it("adding new minter and mint", async function () {
@@ -138,7 +138,7 @@ describe("Token contract", function (){
 
         it("the burn fails because the address doesn't have the role of a burner", async function () {
             await expect(token.connect(addr1).burn(deployer.address, parseEther('200'))
-                ).to.be.revertedWith("AlluoToken: must have burner role to burn");
+                ).to.be.revertedWith("AlluoToken: must have burner role");
         });
 
         it("burn fails because the amount exceeds the balance", async function () {
@@ -173,7 +173,7 @@ describe("Token contract", function (){
         it("Not allow user without changer role to change cap", async function () {
 
             await expect(token.connect(addr1).changeCap(parseEther('300000000'))
-            ).to.be.revertedWith("AlluoToken: must have cap changer role to change");
+            ).to.be.revertedWith("AlluoToken: must have cap changer role");
 
         });
 
@@ -181,14 +181,14 @@ describe("Token contract", function (){
 
             await token.connect(admin).mint(addr1.address, parseEther('100000000'))
             await expect(token.connect(admin).changeCap(parseEther('50000000'))
-            ).to.be.revertedWith("AlluoToken: new cap needs to be greater then total supply and zero");
+            ).to.be.revertedWith("AlluoToken: wrong new cap value");
 
         });
 
         it("Not allow to set cap to zero", async function () {
 
             await expect(token.connect(admin).changeCap(0)
-            ).to.be.revertedWith("AlluoToken: new cap needs to be greater then total supply and zero");
+            ).to.be.revertedWith("AlluoToken: wrong new cap value");
 
         });
 
@@ -197,7 +197,7 @@ describe("Token contract", function (){
             await token.connect(admin).mint(addr1.address, parseEther('200000000'))
 
             await expect(token.connect(admin).mint(addr2.address, parseEther('1'))
-            ).to.be.revertedWith("AlluoToken: total supply must be below or equal to the cap");
+            ).to.be.revertedWith("AlluoToken: can't mint over max cap");
         });
 
     });
@@ -223,10 +223,10 @@ describe("Token contract", function (){
 
         it("Not allow user without pauser role to pause and unpause", async function () {
             await expect(token.connect(addr1).setPause(true)
-            ).to.be.revertedWith("AlluoToken: must have pauser role to change pause state");
+            ).to.be.revertedWith("AlluoToken: must have pauser role");
             await token.connect(admin).setPause(true);
             await expect(token.connect(addr1).setPause(false)
-            ).to.be.revertedWith("AlluoToken: must have pauser role to change pause state");
+            ).to.be.revertedWith("AlluoToken: must have pauser role");
         });
 
         it("Add user to whitelits and allow transfer funds even on pause", async function () {
@@ -244,7 +244,7 @@ describe("Token contract", function (){
 
         it("Not allow users without admin role add others to whitelist", async function () {
             await expect(token.connect(addr1).setWhiteStatus(addr1.address, true)
-            ).to.be.revertedWith("AlluoToken: must have admin role to add to white list");
+            ).to.be.revertedWith("AlluoToken: must have admin role");
 
         });
 
@@ -260,7 +260,7 @@ describe("Token contract", function (){
 
         it("Not allow user without admin role to add others in blocklist", async function () {
             await expect(token.connect(addr1).setBlockStatus(addr2.address, true)
-            ).to.be.revertedWith("AlluoToken: must have admin role to add to block list");
+            ).to.be.revertedWith("AlluoToken: must have admin role");
             await token.connect(admin).setBlockStatus(addr1.address, true)
 
         });
