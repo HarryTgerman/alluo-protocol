@@ -7,6 +7,9 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
+// Deployed on Ethereum Mainnet
+// https://etherscan.io/address/0x1e5193ccc53f25638aa22a940af899b692e10b09
+
 contract AlluoToken is ERC20, AccessControl, ERC20Permit, ERC20Votes {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
