@@ -24,13 +24,13 @@ contract TeamVesting is ReentrancyGuard, Ownable {
     struct UserInfo {
         uint256 accumulated;
         uint256 paidOut;
+        uint256 vestingStartTime;
+        uint256 vestingEndTime;
+        bool isStarted;
     }
 
     // user info storage
     mapping(address => UserInfo) public users;
-
-    // from this timestamp tokens are gradually getting available
-    uint256 public vestingStartTime;
 
     // sum of all tokens to be paid
     uint256 public totalTokensToPay;
@@ -38,18 +38,16 @@ contract TeamVesting is ReentrancyGuard, Ownable {
     // sum of all tokens has been paid
     uint256 public totalTokensPaid;
 
-    // from this timestamp 100% of tokens are available
-    uint256 public vestingEndTime;
-
     // vesting duration
     uint40 public immutable vestingPeriod;
 
-    // is vesting countdown live
-    bool public isStarted;
-
     event UsersBatchAdded(address[] users, uint256[] amounts);
 
-    event CountdownStarted(uint256 vestingStartTime, uint256 vestingEndTime);
+    event CountdownStarted(
+        uint256 vestingStartTime,
+        uint256 vestingEndTime,
+        address[] users
+    );
 
     event TokensClaimed(address indexed user, uint256 amount);
 
@@ -93,17 +91,29 @@ contract TeamVesting is ReentrancyGuard, Ownable {
     /**
      * @dev Start vesting countdown. Can only be called by contract owner.
      */
-    function startCountdown() external onlyOwner {
-        // solhint-disable-next-line reason-string
-        require(!isStarted, "Vesting: countdown is already started");
+    function startCountdown(address[] memory _users) external onlyOwner {
+        uint256 startTime = block.timestamp + (MONTH * CLIFF_MONTHS);
+        uint256 endTime = startTime + vestingPeriod;
 
-        // solhint-disable-next-line not-rely-on-time
-        vestingStartTime = block.timestamp + (MONTH * CLIFF_MONTHS);
+        for (uint256 index = 0; index < _users.length; index++) {
+            UserInfo storage userInfo = users[_users[index]];
 
-        vestingEndTime = vestingStartTime + vestingPeriod;
-        isStarted = true;
+            require(
+                !userInfo.isStarted,
+                "Vesting: countdown is already started"
+            );
+            require(
+                users[_users[index]].accumulated != 0,
+                "Vesting: unknown user"
+            );
 
-        emit CountdownStarted(vestingStartTime, vestingEndTime);
+            userInfo.vestingStartTime = startTime;
+
+            userInfo.vestingEndTime = endTime;
+            userInfo.isStarted = true;
+        }
+
+        emit CountdownStarted(startTime, endTime, _users);
     }
 
     /**
@@ -112,13 +122,17 @@ contract TeamVesting is ReentrancyGuard, Ownable {
     function claimToken() external nonReentrant {
         UserInfo storage userInfo = users[msg.sender];
 
-        // solhint-disable-next-line reason-string
         require(
             (userInfo.accumulated - userInfo.paidOut) > 0,
             "Vesting: not enough tokens to claim"
         );
 
-        uint256 availableAmount = calcAvailableToken(userInfo.accumulated);
+        uint256 availableAmount = calcAvailableToken(
+            userInfo.accumulated,
+            userInfo.vestingStartTime,
+            userInfo.vestingEndTime,
+            userInfo.isStarted
+        );
         availableAmount -= userInfo.paidOut;
 
         userInfo.paidOut += availableAmount;
@@ -136,14 +150,25 @@ contract TeamVesting is ReentrancyGuard, Ownable {
         returns (
             uint256 availableAmount,
             uint256 paidOut,
-            uint256 totalAmountToPay
+            uint256 totalAmountToPay,
+            uint256 vestingStartTime,
+            uint256 vestingEndTime,
+            bool isStarted
         )
     {
         UserInfo storage userInfo = users[user];
         return (
-            calcAvailableToken(userInfo.accumulated) - userInfo.paidOut,
+            calcAvailableToken(
+                userInfo.accumulated,
+                userInfo.vestingStartTime,
+                userInfo.vestingEndTime,
+                userInfo.isStarted
+            ) - userInfo.paidOut,
             userInfo.paidOut,
-            userInfo.accumulated
+            userInfo.accumulated,
+            userInfo.vestingStartTime,
+            userInfo.vestingEndTime,
+            userInfo.isStarted
         );
     }
 
@@ -152,11 +177,12 @@ contract TeamVesting is ReentrancyGuard, Ownable {
      * @param _amount  An input amount used to calculate vesting's output value.
      * @return availableAmount_ An amount available to claim.
      */
-    function calcAvailableToken(uint256 _amount)
-        private
-        view
-        returns (uint256 availableAmount_)
-    {
+    function calcAvailableToken(
+        uint256 _amount,
+        uint256 vestingStartTime,
+        uint256 vestingEndTime,
+        bool isStarted
+    ) private view returns (uint256 availableAmount_) {
         // solhint-disable-next-line not-rely-on-time
         if (!isStarted || block.timestamp <= vestingStartTime) {
             return 0;

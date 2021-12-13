@@ -54,8 +54,6 @@ describe('Contract: TeamVesting', () => {
         expect(await investorsVesting.CLIFF_MONTHS()).to.be.equal(cliffMonths);
         expect(await investorsVesting.VESTING_MONTHS_COUNT()).to.be.equal(vestingMonthsCount);
         expect(await investorsVesting.MONTH()).to.be.equal(month);
-
-        expect(await investorsVesting.isStarted()).to.be.false;
     });
 
     it("Should add private user", async function () {
@@ -149,23 +147,54 @@ describe('Contract: TeamVesting', () => {
     });
 
     it("Should start vesting countdown", async function () {
-        await investorsVesting.startCountdown();
+        const user = accounts[0].address;
+        const amount = parseEther("1000");
+
+        await token.mint(investorsVesting.address, amount)
+        await investorsVesting.addPrivateUser([user], [amount]);
+
+        await investorsVesting.startCountdown([user]);
         const blockTimestamp = await getLatestBlockTimestamp();
         const startTime = blockTimestamp.add(month * cliffMonths);
 
-        expect(await investorsVesting.isStarted()).to.be.true;
-        expect(await investorsVesting.vestingStartTime()).to.be.equal(startTime);
-        expect(await investorsVesting.vestingEndTime()).to.be.equal(startTime.add(month * vestingMonthsCount));
+        const userInfo = await investorsVesting.getUserInfo(user);
+
+        expect(userInfo.isStarted).to.be.true;
+        expect(userInfo.vestingStartTime).to.be.equal(startTime);
+        expect(userInfo.vestingEndTime).to.be.equal(startTime.add(month * vestingMonthsCount));
     });
 
     it("Should not start vesting countdown (not owner)", async function () {
+        const user = accounts[0].address;
+        const amount = parseEther("1000");
+
+        await token.mint(investorsVesting.address, amount)
+        await investorsVesting.addPrivateUser([user], [amount]);
+
         const notOwner = accounts[1];
-        await expect(investorsVesting.connect(notOwner).startCountdown()).to.be.revertedWith("Ownable: caller is not the owner");
+        await expect(investorsVesting.connect(notOwner).startCountdown([user])).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
     it("Should not start vesting countdown (already started)", async function () {
-        await investorsVesting.startCountdown();
-        await expect(investorsVesting.startCountdown()).to.be.revertedWith("Vesting: countdown is already started");
+        const user = accounts[0].address;
+        const amount = parseEther("1000");
+
+        await token.mint(investorsVesting.address, amount)
+        await investorsVesting.addPrivateUser([user], [amount]);
+
+        await investorsVesting.startCountdown([user]);
+        await expect(investorsVesting.startCountdown([user])).to.be.revertedWith("Vesting: countdown is already started");
+    });
+
+    it("Should not start vesting countdown (unknown user)", async function () {
+        const user = accounts[0].address;
+        const unknownUser = accounts[1].address;
+        const amount = parseEther("1000");
+
+        await token.mint(investorsVesting.address, amount)
+        await investorsVesting.addPrivateUser([user], [amount]);
+
+        await expect(investorsVesting.startCountdown([user, unknownUser])).to.be.revertedWith("Vesting: unknown user");
     });
 
     it("Should claim no tokens (before vesting start)", async function () {
@@ -174,7 +203,7 @@ describe('Contract: TeamVesting', () => {
 
         await token.mint(investorsVesting.address, amount)
         await investorsVesting.addPrivateUser([user], [amount]);
-        await investorsVesting.startCountdown();
+        await investorsVesting.startCountdown([user]);
 
         const userBalanceBeforeClaim = await token.balanceOf(user);
         await investorsVesting.claimToken();
@@ -209,7 +238,7 @@ describe('Contract: TeamVesting', () => {
 
         await token.mint(investorsVesting.address, amount);
         await investorsVesting.addPrivateUser([user], [amount]);
-        await investorsVesting.startCountdown();
+        await investorsVesting.startCountdown([user]);
 
         incrementNextBlockTimestamp((vestingMonthsCount + cliffMonths) * month);
 
@@ -223,7 +252,7 @@ describe('Contract: TeamVesting', () => {
 
         await token.mint(investorsVesting.address, amount);
         await investorsVesting.addPrivateUser([user], [amount]);
-        await investorsVesting.startCountdown();
+        await investorsVesting.startCountdown([user]);
 
         await incrementNextBlockTimestamp((cliffMonths + (vestingMonthsCount / 2)) * month);
         await mine();
@@ -234,7 +263,7 @@ describe('Contract: TeamVesting', () => {
         const income = userBalanceAfterClaim.sub(userBalanceBeforeClaim);
 
         const blockTimestamp = await getLatestBlockTimestamp();
-        const vestingStartTime = await investorsVesting.vestingStartTime();
+        const vestingStartTime = (await investorsVesting.getUserInfo(user)).vestingStartTime;
 
         const timeDiff = blockTimestamp.sub(vestingStartTime);
 
@@ -249,7 +278,7 @@ describe('Contract: TeamVesting', () => {
 
         await token.mint(investorsVesting.address, amount);
         await investorsVesting.addPrivateUser([user], [amount]);
-        await investorsVesting.startCountdown();
+        await investorsVesting.startCountdown([user]);
 
         await incrementNextBlockTimestamp((cliffMonths + (vestingMonthsCount / 4)) * month); // quater way
         await mine();
@@ -268,7 +297,7 @@ describe('Contract: TeamVesting', () => {
         const secondIncome = userBalanceAfterSecondClaim.sub(userBalanceBeforeSecondClaim);
 
         const blockTimestamp = await getLatestBlockTimestamp();
-        const vestingStartTime = await investorsVesting.vestingStartTime();
+        const vestingStartTime = (await investorsVesting.getUserInfo(user)).vestingStartTime;
 
         const timeDiff = blockTimestamp.sub(vestingStartTime);
 
@@ -283,7 +312,7 @@ describe('Contract: TeamVesting', () => {
 
         await token.mint(investorsVesting.address, amount);
         await investorsVesting.addPrivateUser([user], [amount]);
-        await investorsVesting.startCountdown();
+        await investorsVesting.startCountdown([user]);
 
         incrementNextBlockTimestamp((vestingMonthsCount + cliffMonths) * month + 1);
         await mine();
