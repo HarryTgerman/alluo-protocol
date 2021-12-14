@@ -6,10 +6,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
-import "./IPool.sol";
-import "./IToken.sol";
-import "./IStaking.sol";
-import "./Harvest.sol";
+import "./../interface/IPool.sol";
+import "./../interface/IToken.sol";
+import "./../interface/IStaking.sol";
+import "../Harvest.sol";
 
 contract MVPStrategy is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
