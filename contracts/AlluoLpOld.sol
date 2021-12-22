@@ -2,19 +2,21 @@
 pragma solidity ^0.8.4;
 
 import "./StablePool.sol";
-import "./ERC20Modified.sol";
 
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract AlluoLp is ERC20Modified, AccessControl {
+contract AlluoLpOld is ERC20, AccessControl, ReentrancyGuard {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     address public poolAdress;
 
-    constructor() ERC20Modified("AlluoLP", "ALP") {
+    constructor() ERC20("AlluoLP", "ALP") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _grantRole(BURNER_ROLE, msg.sender);
@@ -23,15 +25,6 @@ contract AlluoLp is ERC20Modified, AccessControl {
 
     function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
         
-        _beforeTokenTransfer(address(0), to, amount);
-
-        _mint(to, amount);
-
-        _afterTokenTransfer(address(0), to, amount);
-
-    }
-
-    function safeMint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
         _mint(to, amount);
     }
 
@@ -43,7 +36,7 @@ contract AlluoLp is ERC20Modified, AccessControl {
         internal
         override 
     {
-        StablePool(poolAdress).claim(from);
+        //StablePool(poolAdress).claim(from);
         super._beforeTokenTransfer(from, to, amount);
     }
 
@@ -52,7 +45,7 @@ contract AlluoLp is ERC20Modified, AccessControl {
         override
     {
         //console.log("after");
-        StablePool(poolAdress).claim(to);
+        //StablePool(poolAdress).claim(to);
         super._afterTokenTransfer(from, to, amount);
     }
 
