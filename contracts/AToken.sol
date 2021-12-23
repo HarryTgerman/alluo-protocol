@@ -3,7 +3,7 @@ pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./IToken.sol";
+import "./interface/IToken.sol";
 
 contract AToken is ERC20, Ownable, IToken {
     address public override mvpContract;
