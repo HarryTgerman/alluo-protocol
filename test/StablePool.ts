@@ -3,26 +3,25 @@ import { ethers } from "hardhat";
 import { Contract, ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { parseEther } from "@ethersproject/units";
+import { AlluoLp, AlluoLp__factory, IERC20, StablePool, StablePool__factory, Vault, Vault__factory } from "../typechain";
 
 
 let TestDAI: ContractFactory;
-let testDAI: Contract;
+let testDAI: IERC20;
 
-let LpToken: ContractFactory;
-let lpToken: Contract;
+let lpToken: AlluoLp;
 
-let StablePool: ContractFactory;
-let stablePool: Contract;
+let stablePool: StablePool;
 
-let Vault: ContractFactory;
-let liquidityBufferVault: Contract;
-let FarmingVault: Contract;
+let liquidityBufferVault: Vault;
+let farmingVault: Vault;
 
 let deployer: SignerWithAddress;
 let addr1: SignerWithAddress;
 let addr2: SignerWithAddress;
 let addr3: SignerWithAddress;
 let addr4: SignerWithAddress;
+let strategy: SignerWithAddress;
 
 async function skipDays(d: number){
     ethers.provider.send("evm_increaseTime", [d * 86400]);
@@ -32,31 +31,31 @@ async function skipDays(d: number){
 describe("StablePool contract", function (){
     
     beforeEach(async function () {
-        [deployer, addr1, addr2, addr3, addr4] = await ethers.getSigners();
+        [deployer, addr1, addr2, addr3, addr4, strategy] = await ethers.getSigners();
 
         TestDAI = await ethers.getContractFactory("TestToken");
-        testDAI = await TestDAI.deploy();   
+        testDAI = await TestDAI.deploy() as IERC20;   
         
-        LpToken = await ethers.getContractFactory("AlluoLp");
-        lpToken = await LpToken.deploy(); 
+        const LpToken = await ethers.getContractFactory("AlluoLp") as AlluoLp__factory;
+        lpToken = await LpToken.deploy() as AlluoLp; 
 
-        StablePool = await ethers.getContractFactory("StablePool");
-        stablePool = await StablePool.deploy(lpToken.address, testDAI.address);
+        const StablePool = await ethers.getContractFactory("StablePool") as StablePool__factory;
+        stablePool = await StablePool.deploy(lpToken.address, testDAI.address) as StablePool;
 
         lpToken.setPoolAddress(stablePool.address);
         lpToken.grantRole(await lpToken.MINTER_ROLE(), stablePool.address);
         lpToken.grantRole(await lpToken.BURNER_ROLE(), stablePool.address);
         lpToken.grantRole(await lpToken.ADMIN_ROLE(), stablePool.address);
 
-        Vault = await ethers.getContractFactory("Vault");
-        liquidityBufferVault = await Vault.deploy(); 
-        FarmingVault = await Vault.deploy(); 
+        const Vault = await ethers.getContractFactory("Vault") as Vault__factory;
+        liquidityBufferVault = await Vault.deploy() as Vault; 
+        farmingVault = await Vault.deploy() as Vault; 
 
         liquidityBufferVault.setPool(stablePool.address);
-        FarmingVault.setPool(stablePool.address);
+        farmingVault.setPool(stablePool.address);
 
         stablePool.setbufferVaultAddress(liquidityBufferVault.address);
-        stablePool.setfarmingVaultAddress(FarmingVault.address);
+        stablePool.setfarmingVaultAddress(farmingVault.address);
 
         
         testDAI.transfer(addr1.address, parseEther("1000"))
@@ -69,14 +68,23 @@ describe("StablePool contract", function (){
         testDAI.connect(addr3).approve(stablePool.address, parseEther("1000"))
         testDAI.connect(addr4).approve(stablePool.address, parseEther("1000"))
 
+        farmingVault.giveApprove(testDAI.address, strategy.address);
+
     });
 
     describe("Start", function () {
         it("should mint lp to ", async function () {
 
             await stablePool.connect(addr1).deposit(parseEther("100"));
-            // expect(await lpToken.balanceOf(addr1.address)).to.equal(parseEther('100'));
-            // console.log((await lpToken.balanceOf(addr1.address)).toString());
+            expect(await lpToken.balanceOf(addr1.address)).to.equal(parseEther('100'));
+
+            expect(await testDAI.balanceOf(farmingVault.address)).to.equal(parseEther('100'));
+            expect(await testDAI.balanceOf(farmingVault.address)).to.equal(await farmingVault.getBalance());
+
+            expect(await testDAI.balanceOf(liquidityBufferVault.address)).to.equal(parseEther('0'));
+
+            await testDAI.connect(strategy).transferFrom(farmingVault.address,strategy.address, parseEther("50"))
+            await stablePool.connect(addr2).deposit(parseEther("100"));
             await skipDays(73);
             
             await stablePool.setInterest(15);

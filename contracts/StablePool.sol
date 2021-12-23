@@ -76,17 +76,14 @@ contract StablePool is AccessControl, ReentrancyGuard{
     }
 
     function claim(address _address) public{
-        if(_address != address(0)){
-            update();
-            if(userDF[_address] != 0 ){
-                uint256 userBalance = AlluoLp(lpToken).balanceOf(_address);
-                uint256 userNewBalance = (DF * userBalance / userDF[_address]);
-                AlluoLp(lpToken).safeMint(_address, userNewBalance - userBalance);
+        update();
+        if(userDF[_address] != 0 ){
+            uint256 userBalance = AlluoLp(lpToken).balanceOf(_address);
+            uint256 userNewBalance = (DF * userBalance / userDF[_address]);
+            AlluoLp(lpToken).safeMint(_address, userNewBalance - userBalance);
 
-            }
-            userDF[_address] = DF;
         }
-
+        userDF[_address] = DF;
     }
 
     function withdraw(uint256 _amount) public nonReentrant{
@@ -119,28 +116,31 @@ contract StablePool is AccessControl, ReentrancyGuard{
                 IERC20(DAI).safeTransferFrom(bufferVaultAddress, msg.sender, buffer);
                 Vault(bufferVaultAddress).changeBalance(-int256(buffer));
                 remains -= buffer;
-
             }
         }
         if(remains != 0){
-            if (farming != 0){
-                if(farming > remains){
+            uint256 currentFarming = IERC20(DAI).balanceOf(farmingVaultAddress);
+            if (farming > remains){
+                if(currentFarming > remains){
                     IERC20(DAI).safeTransferFrom(farmingVaultAddress, msg.sender, remains);
                     Vault(farmingVaultAddress).changeBalance(-int256(remains));
                     remains = 0;
                 }
                 else{
-                    IERC20(DAI).safeTransferFrom(farmingVaultAddress, msg.sender, farming);
-                    Vault(farmingVaultAddress).changeBalance(-int256(farming));
-                    remains -= farming;
+                    IERC20(DAI).safeTransferFrom(farmingVaultAddress, msg.sender, currentFarming);
+                    Vault(farmingVaultAddress).changeBalance(-int256(currentFarming));
+                    remains -= currentFarming;
                     callStrategiesForHelp(remains);
                 }
+            }
+            else{
+                callDaoForHelp(remains);
             }
         }
     }
 
     function sendMissing(uint256 _amount) internal returns(uint256){
-        uint256 missing = checkStatus();
+        uint256 missing = checkMissing();
         if(missing != 0){
             if(missing > _amount){
                 IERC20(DAI).safeTransferFrom(msg.sender, bufferVaultAddress, _amount);
@@ -153,13 +153,14 @@ contract StablePool is AccessControl, ReentrancyGuard{
                 return _amount - missing; 
             }
         }
-        return 0;
+        return _amount;
     }
 
-    function checkStatus() internal view returns(uint256) {
+    function checkMissing() internal view returns(uint256) {
         uint256 buffer = Vault(bufferVaultAddress).getBalance();
         uint256 farming = Vault(farmingVaultAddress).getBalance();
         uint256 need = farming * 5 / 100;
+        console.log(need);
         if(buffer < need ){
             return need - buffer;
         }
@@ -186,6 +187,10 @@ contract StablePool is AccessControl, ReentrancyGuard{
     }
 
     function callStrategiesForHelp(uint _amount) private {
+
+    }
+
+    function callDaoForHelp(uint _amount) private {
 
     }
 }
