@@ -2,19 +2,19 @@
 pragma solidity ^0.8.4;
 
 import "./StablePool.sol";
-import "./ERC20Modified.sol";
+import "./ERC20.sol";
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract AlluoLp is ERC20Modified, AccessControl {
+contract AlluoLp is ERC20, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     address public poolAdress;
 
-    constructor() ERC20Modified("AlluoLP", "ALP") {
+    constructor() ERC20("AlluoLP", "ALP") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _grantRole(BURNER_ROLE, msg.sender);
