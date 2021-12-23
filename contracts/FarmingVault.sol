@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract Vault is AccessControl {
+contract FarmingVault is AccessControl {
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -37,5 +37,13 @@ contract Vault is AccessControl {
 
     function giveApprove(address _token, address _recipient) public onlyRole(ADMIN_ROLE){
         IERC20(_token).safeApprove(_recipient, type(uint256).max);
+    }
+
+    function distribute(uint256 _amount) public onlyRole(ADMIN_ROLE){
+        //distribute money across all strategies
+    }
+
+    function callStrategiesForHelp(uint _amount) public onlyRole(ADMIN_ROLE){
+        //takes money out of strategies
     }
 }

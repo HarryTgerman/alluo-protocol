@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 import { Contract, ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { parseEther } from "@ethersproject/units";
-import { AlluoLp, AlluoLp__factory, IERC20, StablePool, StablePool__factory, Vault, Vault__factory } from "../typechain";
+import { AlluoLp, AlluoLp__factory, IERC20, StablePool, StablePool__factory,  LiquidityBufferVault, LiquidityBufferVault__factory, FarmingVault, FarmingVault__factory } from "../typechain";
 
 
 let TestDAI: ContractFactory;
@@ -13,8 +13,8 @@ let lpToken: AlluoLp;
 
 let stablePool: StablePool;
 
-let liquidityBufferVault: Vault;
-let farmingVault: Vault;
+let liquidityBufferVault: LiquidityBufferVault;
+let farmingVault: FarmingVault;
 
 let deployer: SignerWithAddress;
 let addr1: SignerWithAddress;
@@ -47,9 +47,10 @@ describe("StablePool contract", function (){
         lpToken.grantRole(await lpToken.BURNER_ROLE(), stablePool.address);
         lpToken.grantRole(await lpToken.ADMIN_ROLE(), stablePool.address);
 
-        const Vault = await ethers.getContractFactory("Vault") as Vault__factory;
-        liquidityBufferVault = await Vault.deploy() as Vault; 
-        farmingVault = await Vault.deploy() as Vault; 
+        const LiquidityBufferVault = await ethers.getContractFactory("LiquidityBufferVault") as LiquidityBufferVault__factory;
+        const FarmingVault = await ethers.getContractFactory("FarmingVault") as FarmingVault__factory;
+        liquidityBufferVault = await LiquidityBufferVault.deploy() as LiquidityBufferVault; 
+        farmingVault = await FarmingVault.deploy() as FarmingVault; 
 
         liquidityBufferVault.setPool(stablePool.address);
         farmingVault.setPool(stablePool.address);
@@ -57,7 +58,6 @@ describe("StablePool contract", function (){
         stablePool.setbufferVaultAddress(liquidityBufferVault.address);
         stablePool.setfarmingVaultAddress(farmingVault.address);
 
-        
         testDAI.transfer(addr1.address, parseEther("1000"))
         testDAI.transfer(addr2.address, parseEther("1000"))
         testDAI.transfer(addr3.address, parseEther("1000"))
@@ -84,7 +84,7 @@ describe("StablePool contract", function (){
             expect(await testDAI.balanceOf(liquidityBufferVault.address)).to.equal(parseEther('0'));
 
             await testDAI.connect(strategy).transferFrom(farmingVault.address,strategy.address, parseEther("50"))
-            await stablePool.connect(addr2).deposit(parseEther("100"));
+            //await stablePool.connect(addr2).deposit(parseEther("100"));
             await skipDays(73);
             
             await stablePool.setInterest(15);
