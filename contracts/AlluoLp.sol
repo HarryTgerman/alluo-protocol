@@ -21,7 +21,7 @@ contract AlluoLp is ERC20, AccessControl {
         _grantRole(ADMIN_ROLE, msg.sender);
     }
 
-    function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
+    function safeMint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
         
         _beforeTokenTransfer(address(0), to, amount);
 
@@ -31,8 +31,17 @@ contract AlluoLp is ERC20, AccessControl {
 
     }
 
-    function safeMint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
+    function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
+        
         _mint(to, amount);
+    }
+
+    function safeBurn(address account, uint256 amount) public onlyRole(BURNER_ROLE) {
+        _beforeTokenTransfer(account, address(0), amount);
+        
+        _burn(account, amount);
+
+        _afterTokenTransfer(account, address(0), amount);
     }
 
     function burn(address account, uint256 amount) public onlyRole(BURNER_ROLE) {

@@ -48,10 +48,9 @@ contract StablePool is AccessControl, ReentrancyGuard{
     address public farmingVaultAddress;
 
     //constructor(address _lpToken) {
-    constructor(address _lpToken, address _dai) {
+    constructor(address _dai) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADMIN_ROLE, msg.sender);
-        lpToken = _lpToken;
         DAI = _dai;
         lastDFUpdate = block.timestamp;
         update();
@@ -70,18 +69,18 @@ contract StablePool is AccessControl, ReentrancyGuard{
         if(userDF[_address] != 0 ){
             uint256 userBalance = AlluoLp(lpToken).balanceOf(_address);
             uint256 userNewBalance = (DF * userBalance / userDF[_address]);
-            AlluoLp(lpToken).safeMint(_address, userNewBalance - userBalance);
+            AlluoLp(lpToken).mint(_address, userNewBalance - userBalance);
         }
         userDF[_address] = DF;
     }
 
     function deposit(uint256 _amount) public{
         update();
-        _deposit(_amount);
         if(AlluoLp(lpToken).balanceOf(msg.sender) != 0){
             claim(msg.sender);
         }
-        AlluoLp(lpToken).safeMint(msg.sender, _amount);
+        _deposit(_amount);
+        AlluoLp(lpToken).mint(msg.sender, _amount);
         userDF[msg.sender] = DF;
     }
 
@@ -107,7 +106,7 @@ contract StablePool is AccessControl, ReentrancyGuard{
         uint256 remains = _amount;
         if (buffer != 0){
             if(buffer > _amount){
-                IERC20(DAI).safeTransferFrom(farmingVaultAddress, msg.sender, _amount);
+                IERC20(DAI).safeTransferFrom(bufferVaultAddress, msg.sender, _amount);
                 remains = 0;
             }
             else{
@@ -118,6 +117,7 @@ contract StablePool is AccessControl, ReentrancyGuard{
         if(remains != 0){
             if (farming > remains){
                 FarmingVault(farmingVaultAddress).callStrategiesForHelp(remains);
+                IERC20(DAI).safeTransferFrom(farmingVaultAddress, msg.sender, remains);
             }
             else{
                 callDaoForHelp(remains);
@@ -144,7 +144,6 @@ contract StablePool is AccessControl, ReentrancyGuard{
         uint256 buffer = IERC20(DAI).balanceOf(bufferVaultAddress);
         uint256 farming = FarmingVault(farmingVaultAddress).getBalance();
         uint256 need = farming * 5 / 100;
-        //console.log(need);
         if(buffer < need ){
             return need - buffer;
         }
@@ -156,17 +155,18 @@ contract StablePool is AccessControl, ReentrancyGuard{
     function setInterest(uint8 _newInterest) public onlyRole(ADMIN_ROLE){
         update();
         interest = _newInterest;
+        FarmingVault(farmingVaultAddress).changeInterestInStrategies(_newInterest);
     }
 
     function setLpToken(address _newToken) public onlyRole(ADMIN_ROLE){
         lpToken = _newToken;
     }
 
-    function setbufferVaultAddress(address _newBuffer) public onlyRole(ADMIN_ROLE){
+    function setBufferVaultAddress(address _newBuffer) public onlyRole(ADMIN_ROLE){
         bufferVaultAddress = _newBuffer;
     }
 
-    function setfarmingVaultAddress(address _newFarming) public onlyRole(ADMIN_ROLE){
+    function setFarmingVaultAddress(address _newFarming) public onlyRole(ADMIN_ROLE){
         farmingVaultAddress = _newFarming;
     }
 
