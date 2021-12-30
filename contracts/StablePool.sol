@@ -57,6 +57,7 @@ contract StablePool is AccessControl, ReentrancyGuard{
     }
 
     function update() public{
+        //console.log(DF);
         uint256 timeFromLastUpdate = block.timestamp - lastDFUpdate;
         if(timeFromLastUpdate <= lastDFUpdate + updateTimeLimit){
             DF = (DF * (interest * DENOMINATOR * timeFromLastUpdate / YEAR + 100 * DENOMINATOR) / DENOMINATOR) / 100;
@@ -117,6 +118,7 @@ contract StablePool is AccessControl, ReentrancyGuard{
         if(remains != 0){
             if (farming > remains){
                 FarmingVault(farmingVaultAddress).callStrategiesForHelp(remains);
+                FarmingVault(farmingVaultAddress).changeBalance(-int256(remains));
                 IERC20(DAI).safeTransferFrom(farmingVaultAddress, msg.sender, remains);
             }
             else{

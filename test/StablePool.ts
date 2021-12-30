@@ -90,7 +90,7 @@ describe('StablePool contract', function (){
     });
 
     describe('Full cycle', function () {
-        it('everything must be ok ', async function () {
+        it('everything must be ok', async function () {
             for(let i = 0; i < 10; i ++){                
                 await stablePool.connect(bigHolder).deposit(parseEther('1000'));
             }   
@@ -180,7 +180,7 @@ describe('StablePool contract', function (){
     //     it('should mint lp tokens', async function () {
 
     //         await stablePool.connect(addr1).deposit(parseEther('100'));
-    //         for(let i = 0; i < 365; i ++){
+    //         for(let i = 0; i < 365*10; i ++){
     //             await ethers.provider.send('evm_increaseTime', [60*60*24]);
     //             await ethers.provider.send('evm_mine', []);
     //             await stablePool.connect(addr1).claim(addr1.address);
