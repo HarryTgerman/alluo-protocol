@@ -3,7 +3,7 @@ pragma solidity 0.8.4;
 
 // Generated from pool contract ABI (https://polygonscan.com/address/0x19793B454D3AfC7b454F206Ffe95aDE26cA6912c#code)
 // and interface generator (https://bia.is/tools/abi2solidity/)
-interface IStaking {
+interface IAutofarmStaking {
     function add(
         uint256 _allocPoint,
         address _want,

@@ -58,6 +58,7 @@ const config: HardhatUserConfig = {
     },
     maticmainnet: {
       url: "https://rpc-mainnet.maticvigil.com/",
+      gasPrice: 30000000000,
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     }
@@ -79,7 +80,7 @@ const config: HardhatUserConfig = {
     runOnCompile: false,
     strict: false,
   }
-  
+
 };
 
 export default config;
