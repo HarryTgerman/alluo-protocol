@@ -6,6 +6,9 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+// Deployed on Ethereum Mainnet
+// https://etherscan.io/address/0x86cc79b8bf3ac9c153a6856f43eaa6d599a9423f
+
 contract TeamVesting is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 

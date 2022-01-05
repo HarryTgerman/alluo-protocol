@@ -10,6 +10,30 @@ import 'hardhat-contract-sizer'
 import "./tasks"
 dotenv.config();
 
+//       From Alluo Smart Contract Developers - Happy New Year!!!
+//
+//                                  |
+//                                \ ' /
+//                              -- (*) --
+//                                 >*<
+//                                >0<@<
+//                               >>>@<<*
+//                              >@>*<0<<<
+//                             >*>>@<<<@<<
+//                            >@>>0<<<*<<@<
+//                           >*>>0<<@<<<@<<<
+//                          >@>>*<<@<>*<<0<*<
+//            \*/          >0>>*<<@<>0><<*<@<<
+//        ___\\U//___     >*>>@><0<<*>>@><*<0<<
+//        |\\ | | \\|    >@>>0<*<0>>@<<0<<<*<@<<  
+//        | \\| | _(UU)_ >((*))_>0><*<0><@<<<0<*<
+//        |\ \| || / //||.*.*.*.|>>@<<*<<@>><0<<<
+//        |\\_|_|&&_// ||*.*.*.*|_\\db//_               
+//        """"|'.'.'.|~~|.*.*.*|     ____|_
+//            |'.'.'.|   ^^^^^^|____|>>>>>>|
+//            ~~~~~~~~         '""""`------'
+
+
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
 task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
@@ -58,6 +82,7 @@ const config: HardhatUserConfig = {
     },
     maticmainnet: {
       url: "https://rpc-mainnet.maticvigil.com/",
+      gasPrice: 30000000000,
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     }
@@ -79,7 +104,7 @@ const config: HardhatUserConfig = {
     runOnCompile: false,
     strict: false,
   }
-  
+
 };
 
 export default config;
