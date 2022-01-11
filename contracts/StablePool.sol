@@ -96,7 +96,6 @@ contract StablePool is AccessControl, ReentrancyGuard{
         uint256 remains = sendMissing(_amount);
         if(remains != 0){
             IERC20(DAI).safeTransferFrom(msg.sender, farmingVaultAddress, remains);
-            FarmingVault(farmingVaultAddress).changeBalance(int256(remains));
             FarmingVault(farmingVaultAddress).distribute(remains);
         }
     }
@@ -117,9 +116,16 @@ contract StablePool is AccessControl, ReentrancyGuard{
         }
         if(remains != 0){
             if (farming > remains){
-                FarmingVault(farmingVaultAddress).callStrategiesForHelp(remains);
-                FarmingVault(farmingVaultAddress).changeBalance(-int256(remains));
-                IERC20(DAI).safeTransferFrom(farmingVaultAddress, msg.sender, remains);
+            try FarmingVault(farmingVaultAddress).callStrategiesForHelp(remains) {
+                //emit SuccessEvent();
+            } catch Error(string memory revertReason) {
+                if(keccak256(abi.encodePacked(revertReason)) == keccak256(abi.encodePacked("AutofarmStrategy: not enough LP"))){
+                    callDaoForHelp(remains);
+                }
+                else{
+                    revert("something went wrong");
+                }
+            }
             }
             else{
                 callDaoForHelp(remains);

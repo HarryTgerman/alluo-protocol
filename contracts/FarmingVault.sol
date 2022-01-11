@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "./strategy/AutofarmStrategy.sol";
+
 contract FarmingVault is AccessControl {
     using SafeERC20 for IERC20;
 
@@ -33,15 +35,15 @@ contract FarmingVault is AccessControl {
 
     uint256 private balance;
     address public poolAddress;
-    bool public active;
-
-    uint256 all;
+    address public apyBuffer;
+    bool public farmingState;
 
     struct Strategy{
         address sAddress;
-        uint256 sBalance;
-        uint256 sPercent;
-        uint256 sDF;
+        uint256 minBalance;
+        uint256 percent;
+        uint256 DF;
+        bool isAuto;
     }
 
     Strategy[] public strategies;
@@ -49,7 +51,7 @@ contract FarmingVault is AccessControl {
     uint256[] public activeStrategies;
 
     modifier isActive(){
-        require(active == true);
+        require(farmingState == true);
         _;
     }
 
@@ -61,10 +63,6 @@ contract FarmingVault is AccessControl {
 
     function getBalance() public view returns(uint256){
         return balance;
-    }
-
-    function changeBalance(int256 _amount) public onlyRole(ADMIN_ROLE){
-        balance = uint256(int256(balance) + _amount);
     }
     
     function setPool(address _pool) public onlyRole(DEFAULT_ADMIN_ROLE){
@@ -86,82 +84,102 @@ contract FarmingVault is AccessControl {
 
     function claim(uint256 _id) public{
         Strategy storage strategy = strategies[_id];
-        if(strategy.sDF != 0){
-            strategy.sBalance = (DF * strategy.sBalance / strategy.sDF);
+        if(strategy.DF != 0){
+            strategy.minBalance = (DF * strategy.minBalance / strategy.DF);
         }
-        strategy.sDF = DF;
+        strategy.DF = DF;
     }
 
     function distribute(uint256 _amount) public onlyRole(ADMIN_ROLE) isActive{
         update();
         for(uint256 i = 0; i < activeStrategies.length; i++) {
-            Strategy storage str = strategies[activeStrategies[i]];
-            uint256 amount = _amount * str.sPercent / 100;
+            Strategy storage strategy = strategies[activeStrategies[i]];
+            uint256 amount = _amount * strategy.percent / 100;
             claim(activeStrategies[i]);
-            giveToStrategy(str.sAddress, amount);
-            str.sBalance += amount;
+            AutofarmStrategy(strategy.sAddress).invest(amount);
+            strategy.minBalance += amount;
         }
+        balance += _amount;
+    }
+
+    function callStrategiesForHelp(uint _amount) public onlyRole(ADMIN_ROLE) isActive{
+        update();
+        for(uint256 i = 0; i < activeStrategies.length; i++) {
+            Strategy storage strategy = strategies[activeStrategies[i]];
+            uint256 amount = _amount * strategy.percent / 100;
+            claim(activeStrategies[i]);
+            AutofarmStrategy(strategy.sAddress).unwind(amount);
+            strategy.minBalance -= amount;
+        }
+        balance -= _amount;
     }
 
     function finishStrategies() public onlyRole(ADMIN_ROLE) isActive{
         update();
+        uint256 totalMinBalance;
         for(uint256 i = 0; i < activeStrategies.length; i++) {
-            Strategy storage str = strategies[activeStrategies[i]];
-            uint256 amountReceived = takeOutOfStrategy(str.sAddress, address(this), all);
+            Strategy storage strategy = strategies[activeStrategies[i]];
+            uint256 amountReceived = AutofarmStrategy(strategy.sAddress).unwindAll();
             claim(activeStrategies[i]);
-            if(str.sBalance > amountReceived){
+            totalMinBalance += strategy.minBalance;
+            if(strategy.minBalance > amountReceived){
                 createSlashingProposal();
             }
         }
-        balance = IERC20(DAI).balanceOf(address(this));
+        balance = totalMinBalance;
+        splitExtra(IERC20(DAI).balanceOf(address(this)) - totalMinBalance);
         delete activeStrategies;
-        active = false;
+        farmingState = false;
     }
 
-    function addStrategy(address _strategyAddress) public onlyRole(ADMIN_ROLE){
+    function addStrategy(address _strategyAddress, bool _isAuto) public onlyRole(ADMIN_ROLE){
         strategies.push(Strategy({
             sAddress: _strategyAddress,
-            sBalance: 0,
-            sPercent: 0,
-            sDF: 0
+            minBalance: 0,
+            percent: 0,
+            DF: 0,
+            isAuto: _isAuto
         }));
     }
 
     function setActiveStrategies(uint256[] memory _ids, uint256[] memory _percents) public onlyRole(ADMIN_ROLE){
         require(_ids.length == _percents.length);
+        require(farmingState == false);
         for (uint256 i = 0; i < _ids.length; i++) {
             activeStrategies.push(_ids[i]);
-            Strategy storage str = strategies[_ids[i]];
-            str.sBalance = 0;
-            str.sPercent = _percents[i];
+            Strategy storage strategy = strategies[_ids[i]];
+            strategy.minBalance = 0;
+            strategy.percent = _percents[i];
         }
-        active = true;
+        farmingState = true;
         distribute(balance);
     }
 
-    function callStrategiesForHelp(uint _amount) public onlyRole(ADMIN_ROLE){
-        update();
-        for(uint256 i = 0; i < activeStrategies.length; i++) {
-            Strategy storage str = strategies[activeStrategies[i]];
-            uint256 amount = _amount * str.sPercent / 100;
-            claim(activeStrategies[i]);
-            takeOutOfStrategy(str.sAddress, msg.sender, amount);
-            str.sBalance -= amount;
+    function splitExtra(uint256 _amount) internal{
+        uint256 need = balance / 100;
+        if(IERC20(DAI).balanceOf(apyBuffer) < need){
+            if(need > _amount){
+                IERC20(DAI).safeTransfer(apyBuffer, _amount);   
+            }
+            else{
+                IERC20(DAI).safeTransfer(apyBuffer, need);   
+                sendBalncer(_amount - need);
+            }
+        }
+        else{
+            sendBalncer(_amount);
         }
     }
 
     function changeInterestInStrategies(uint8 _newInterest) public onlyRole(ADMIN_ROLE){
+        update();
         interest = _newInterest;
     }
 
     function createSlashingProposal() public onlyRole(ADMIN_ROLE){
     }
-    
-    function giveToStrategy(address _strategy, uint _amount) public onlyRole(ADMIN_ROLE){
-       IERC20(DAI).transfer(_strategy, _amount);
-    }
 
-    function takeOutOfStrategy(address _strategy, address _to, uint _amount) public onlyRole(ADMIN_ROLE) returns(uint256) {
-        IERC20(DAI).transferFrom(_strategy, _to, _amount);
+    function sendBalncer(uint256 _amount) internal{
     }
+    
 }
