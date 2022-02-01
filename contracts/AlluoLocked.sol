@@ -48,12 +48,15 @@ contract AlluoLocked is
     uint256 public producedTime;
     //
     uint256 public lockDuration = 86400 * 4;
-    uint256 public constant WEEK = 86400 * 7;
 
     //erc20-like interface
-    string private _name;
-    string private _symbol;
-    uint8 private _decimals;
+    struct TokenInfo{
+        string name;
+        string symbol;
+        uint8 decimals;
+    }
+
+    TokenInfo private token;
 
     // Locker contains info related to each locker.
     struct Locker {
@@ -141,10 +144,13 @@ contract AlluoLocked is
 
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(ADMIN_ROLE, msg.sender);
+        //token = TokenInfo("Vote Locked Alluo Token", "vlAlluo", 18) {
 
-        _name ;
-        _symbol = "vlAlluo";
-        _decimals = 18;
+        token = TokenInfo({
+            name: "Vote Locked Alluo Token",
+            symbol: "vlAlluo",
+            decimals: 18
+        });
 
         rewardPerDistribution = _rewardPerDistribution;
         startTime = _startTime;
@@ -157,13 +163,13 @@ contract AlluoLocked is
     }
 
     function decimals() public view returns (uint8) {
-        return _decimals;
+        return token.decimals;
     }
     function name() public view returns (string memory) {
-        return _name;
+        return token.name;
     }
     function symbol() public view returns (string memory) {
-        return _symbol;
+        return token.symbol;
     }
 
     /**
@@ -177,26 +183,6 @@ contract AlluoLocked is
             distributionTime;
     }
 
-    /**
-     * @dev Сalculates available reward
-     * @param _locker Address of the locker
-     * @param _tpl Tokens per lock parameter
-     */
-    function calcReward(address _locker, uint256 _tpl)
-        private
-        view
-        returns (uint256 reward)
-    {
-        Locker storage locker = _lockers[_locker];
-
-        reward =
-            ((locker.amount * _tpl) / 1e20) +
-            locker.rewardAllowed -
-            locker.distributed -
-            locker.rewardDebt;
-
-        return reward;
-    }
     /**
      * @dev Updates the produced rewards parameter for locking
      */
@@ -306,7 +292,7 @@ contract AlluoLocked is
 
         locker.unlockAmount += _amount;
         //revering time to last thursday and adding week + lockDuration
-        locker.unlockTime = (block.timestamp / lockDuration * lockDuration) + WEEK + lockDuration;
+        locker.unlockTime = (block.timestamp / lockDuration * lockDuration) + 86400 * 7 + lockDuration;
 
         emit TokensUnlocked(_amount, block.timestamp, msg.sender);
     }
@@ -333,7 +319,7 @@ contract AlluoLocked is
 
         locker.unlockAmount += amount;
         //revering time to last thursday and adding week + lockDuration
-        locker.unlockTime = (block.timestamp / lockDuration * lockDuration) + WEEK + lockDuration;
+        locker.unlockTime = (block.timestamp / (86400 * 7) * (86400 * 7)) + 86400 * 7 + lockDuration;
 
         emit TokensUnlocked(amount, block.timestamp, msg.sender);
     }
@@ -394,6 +380,27 @@ contract AlluoLocked is
         if (reward > 0) {
             claim();
         }
+    }
+
+    /**
+     * @dev Сalculates available reward
+     * @param _locker Address of the locker
+     * @param _tpl Tokens per lock parameter
+     */
+    function calcReward(address _locker, uint256 _tpl)
+        private
+        view
+        returns (uint256 reward)
+    {
+        Locker storage locker = _lockers[_locker];
+
+        reward =
+            ((locker.amount * _tpl) / 1e20) +
+            locker.rewardAllowed -
+            locker.distributed -
+            locker.rewardDebt;
+
+        return reward;
     }
 
   /**
