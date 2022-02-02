@@ -1,5 +1,6 @@
 // // SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
+import "hardhat/console.sol";
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
@@ -35,8 +36,6 @@ contract AlluoLocked is
     uint256 public distributionTime;
     // Amount of currently locked tokens from all users.
     uint256 public totalLocked;
-    // Amount of currently claimed rewards by the users.
-    uint256 public totalDistributed;
 
     // Аuxiliary parameter (tpl) for locking's math
     uint256 public tokensPerLock;
@@ -46,9 +45,20 @@ contract AlluoLocked is
     uint256 public allProduced;
     // Аuxiliary parameter for locking's math
     uint256 public producedTime;
-    //
-    uint256 public lockDuration = 86400 * 4;
+    //period of locking after lock call
+    uint256 public depositLockDuration;
+    //period of locking after unlock call
+    uint256 public withdrawLockDuration;
 
+    struct AdditionalLockInfo{
+        // Amount of locked tokens waiting for withdraw.
+        uint256 waitingForWithdrawal;
+        // Amount of currently claimed rewards by the users.
+        uint256  totalDistributed;
+    }
+
+    AdditionalLockInfo private additionalLockInfo;
+    
     //erc20-like interface
     struct TokenInfo{
         string name;
@@ -64,8 +74,9 @@ contract AlluoLocked is
         uint256 rewardAllowed; // Rewards allowed to be paid out
         uint256 rewardDebt; // Param is needed for correct calculation locker's share
         uint256 distributed; // Amount of distributed tokens
-        uint256 unlockAmount; // Amount of tokens which is available to unlock
-        uint256 unlockTime; // The time when tokens are available to withdraw
+        uint256 unlockAmount; // Amount of tokens which is available to withdraw
+        uint256 depositUnlockTime; // The time when tokens are available to unlock
+        uint256 withdrawUnlockTime; // The time when tokens are available to withdraw
     }
 
     // Lockers info by token holders.
@@ -90,11 +101,6 @@ contract AlluoLocked is
      * @dev Emitted in `lock` when the user locked the tokens
      */
     event TokensLocked(uint256 amount, uint256 time, address indexed sender);
-
-    /**
-     * @dev Emitted in `transfer` when the user transfers the tokens
-     */
-    event TokensTransfered(address indexed sender, address indexed recipient, uint256 amount, uint256 time);
 
     /**
      * @dev Emitted in `claim` when the user claimed his reward tokens
@@ -134,8 +140,8 @@ contract AlluoLocked is
         uint256 _rewardPerDistribution,
         uint256 _startTime,
         uint256 _distributionTime,
-        address _rewardToken,
-        address _lockingToken
+        address _lockingToken,
+        address _rewardToken
     ) public initializer{
         __AccessControl_init();
         __Pausable_init();
@@ -144,7 +150,6 @@ contract AlluoLocked is
 
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(ADMIN_ROLE, msg.sender);
-        //token = TokenInfo("Vote Locked Alluo Token", "vlAlluo", 18) {
 
         token = TokenInfo({
             name: "Vote Locked Alluo Token",
@@ -157,8 +162,11 @@ contract AlluoLocked is
         distributionTime = _distributionTime;
         producedTime = _startTime;
 
-        rewardToken = IERC20Upgradeable(_rewardToken);
+        depositLockDuration = 86400 * 7;
+        withdrawLockDuration = 86400 * 5;
+
         lockingToken = IERC20Upgradeable(_lockingToken);
+        rewardToken = IERC20Upgradeable(_rewardToken);
         emit LockingInitialized(_lockingToken, _rewardToken);
     }
 
@@ -212,7 +220,6 @@ contract AlluoLocked is
 
         Locker storage locker = _lockers[msg.sender];
 
-        // Transfer specified amount of locking tokens to the contract
         IERC20Upgradeable(lockingToken).safeTransferFrom(
             msg.sender,
             address(this),
@@ -225,48 +232,11 @@ contract AlluoLocked is
         locker.rewardDebt =
             locker.rewardDebt +
             ((_amount * tokensPerLock) / 1e20);
-
         totalLocked = totalLocked + _amount;
         locker.amount = locker.amount + _amount;
-        if(locker.unlockTime == 0){
-            locker.unlockTime = type(uint256).max;
-        }
+        locker.depositUnlockTime = block.timestamp + depositLockDuration;
 
         emit TokensLocked(_amount, block.timestamp, msg.sender);
-    }
-
-    /**
-    * @dev Transfers specified amount of tokens 
-    * @param _to recipient of tokens
-    * @param _amount An amount to unbid
-    */
-    function transfer(address _to, uint256 _amount) public nonReentrant {
-        Locker storage sender = _lockers[msg.sender];
-
-        require(
-            sender.amount >= _amount,
-            "Locking: Not enough tokens to transfer"
-        );
-        Locker storage recipient = _lockers[_to];
-
-        update();
-
-        sender.rewardAllowed =
-            sender.rewardAllowed +
-            ((_amount * tokensPerLock) / 1e20);
-
-        recipient.rewardDebt =
-            recipient.rewardDebt +
-            ((_amount * tokensPerLock) / 1e20);
-
-        sender.amount -= _amount;
-        recipient.amount += _amount;
-
-        if(recipient.unlockTime == 0){
-            recipient.unlockTime = type(uint256).max;
-        }
-
-        emit TokensTransfered(msg.sender, _to, _amount, block.timestamp);
     }
 
     /**
@@ -275,6 +245,11 @@ contract AlluoLocked is
     */
     function unlock(uint256 _amount) public nonReentrant {
         Locker storage locker = _lockers[msg.sender];
+
+        require(
+            locker.depositUnlockTime <= block.timestamp,
+            "Locking: Locked tokens are not available yet"
+        );
 
         require(
             locker.amount >= _amount,
@@ -289,10 +264,10 @@ contract AlluoLocked is
 
         locker.amount -= _amount;
         totalLocked -= _amount;
+        additionalLockInfo.waitingForWithdrawal += _amount;
 
         locker.unlockAmount += _amount;
-        //revering time to last thursday and adding week + lockDuration
-        locker.unlockTime = (block.timestamp / lockDuration * lockDuration) + 86400 * 7 + lockDuration;
+        locker.withdrawUnlockTime = block.timestamp + withdrawLockDuration;
 
         emit TokensUnlocked(_amount, block.timestamp, msg.sender);
     }
@@ -304,7 +279,12 @@ contract AlluoLocked is
         Locker storage locker = _lockers[msg.sender];
 
         require(
-            locker.amount >= 0,
+            locker.depositUnlockTime <= block.timestamp,
+            "Locking: Locked tokens are not available yet"
+        );
+        
+        require(
+            locker.amount > 0,
             "Locking: Not enough tokens to unlock"
         );
         uint256 amount = locker.amount;
@@ -316,10 +296,10 @@ contract AlluoLocked is
             ((amount * tokensPerLock) / 1e20);
         locker.amount = 0;
         totalLocked -= amount;
+        additionalLockInfo.waitingForWithdrawal += amount;
 
         locker.unlockAmount += amount;
-        //revering time to last thursday and adding week + lockDuration
-        locker.unlockTime = (block.timestamp / (86400 * 7) * (86400 * 7)) + 86400 * 7 + lockDuration;
+        locker.withdrawUnlockTime = block.timestamp + withdrawLockDuration;
 
         emit TokensUnlocked(amount, block.timestamp, msg.sender);
     }
@@ -336,13 +316,14 @@ contract AlluoLocked is
         );
 
         require(
-            block.timestamp >= locker.unlockTime,
-            "Locking: Unlocked tokens are not available yet."
+            block.timestamp >= locker.withdrawUnlockTime,
+            "Locking: Unlocked tokens are not available yet"
         );
 
         uint256 amount = locker.unlockAmount;
         locker.unlockAmount = 0;
-        locker.unlockTime = type(uint256).max;
+        locker.withdrawUnlockTime = 0;
+        additionalLockInfo.waitingForWithdrawal -= amount;
         IERC20Upgradeable(lockingToken).safeTransfer(msg.sender, amount);
         emit TokensWithdrawed(amount, block.timestamp, msg.sender);
     }
@@ -363,7 +344,7 @@ contract AlluoLocked is
         Locker storage locker = _lockers[msg.sender];
 
         locker.distributed = locker.distributed + reward;
-        totalDistributed = totalDistributed + reward;
+        additionalLockInfo.totalDistributed += reward;
 
         IERC20Upgradeable(rewardToken).safeTransfer(msg.sender, reward);
         emit TokensClaimed(reward, block.timestamp, msg.sender);
@@ -431,6 +412,10 @@ contract AlluoLocked is
         return _lockers[_address].amount;
     }
 
+    function totalSupply() external view  returns(uint256 amount) {
+        return totalLocked + additionalLockInfo.waitingForWithdrawal;
+    }
+
     /**
      * @dev Returns information about the specified locker
      * @param _address Locker's address
@@ -452,7 +437,7 @@ contract AlluoLocked is
         Locker storage locker = _lockers[_address];
         locked_ = locker.amount;
         unlockAmount_ = locker.unlockAmount;
-        unlockTime_ = locker.unlockTime;
+        unlockTime_ = locker.withdrawUnlockTime;
         claim_ = getClaim(_address);
 
         return (locked_, claim_, unlockAmount_, unlockTime_);
@@ -504,116 +489,6 @@ contract AlluoLocked is
     {
         require(_address != address(0), "Invalid token address");
         IERC20Upgradeable(_address).safeTransfer(msg.sender, _amount);
-    }
-
-    /**
-     * @dev Allows to update the 'produced time' parameter
-     * @param _producedTime Date in unix timestamp format
-     */
-    function updateProducedTime(uint256 _producedTime)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
-        require(_producedTime >= 0, "The value must be possitive");
-        producedTime = _producedTime;
-    }
-
-    /**
-     * @dev Allows to update 'tokens per lock' parameter
-     * @param _tpl Specifeies the new tokens per lock value
-     */
-    function updateTpl(uint256 _tpl) external onlyRole(ADMIN_ROLE) {
-        require(_tpl >= 0, "TPL must be possitive");
-        tokensPerLock = _tpl;
-    }
-
-    /**
-     * @dev Allows to update the value of all produced reward parameter
-     * @param _allProduced Specifeies the new value of rewards totally produced
-     */
-    function updateAllProduced(uint256 _allProduced)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
-        require(_allProduced >= 0, "Amount must be possitive");
-        allProduced = _allProduced;
-    }
-
-    /**
-     * @dev Allows to update the value of produced reward
-     * @param _rewardProduced Specifeies the new value of rewards produced
-     */
-    function updateRewardProduced(uint256 _rewardProduced)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
-        require(_rewardProduced >= 0, "Amount must be possitive");
-        rewardProduced = _rewardProduced;
-    }
-
-    /**
-     * @dev Allows to update the daily reward parameter
-     * @param _rewardPerDistribution Specifeies the new daily reward value
-     */
-    function updateRewardPerDistribution(uint256 _rewardPerDistribution)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
-        require(_rewardPerDistribution >= 0, "Amount must be possitive");
-        rewardPerDistribution = _rewardPerDistribution;
-    }
-
-    /**
-     * @dev Allows to update the value of locked tokens
-     * @param _totalLocked Specifeies the new value of totally locked tokens
-     */
-    function updateTotalLocked(uint256 _totalLocked)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
-        require(_totalLocked >= 0, "Amount must be possitive");
-        totalLocked = _totalLocked;
-    }
-
-    /**
-     * @dev Allows to update the value of distributed rewards
-     * @param _totalDistributed Specifeies the new value of totally distributed rewards
-     */
-    function updateTotalDistributed(uint256 _totalDistributed)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
-        require(_totalDistributed >= 0, "Amount must be possitive");
-        totalDistributed = _totalDistributed;
-    }
-
-    /**
-     * @dev Updates user's information
-     * @param _user Locker's address
-     * @param _amount Amount of locked tokens
-     * @param _rewardAllowed Amount of reward which is allowed to be paid out
-     * @param _rewardDebt Amount of reward debt
-     * @param _distributed Amount of distributed rewards
-     * @param _unlockAmount Amount of unlocked tokens
-     * @param _unlockTime Last timestamp when locker unlocked his tokens
-     */
-    function updateLockerInfo(
-        address _user,
-        uint256 _amount,
-        uint256 _rewardAllowed,
-        uint256 _rewardDebt,
-        uint256 _distributed,
-        uint256 _unlockAmount,
-        uint256 _unlockTime
-    ) external onlyRole(ADMIN_ROLE) {
-        Locker storage locker = _lockers[_user];
-
-        locker.amount = _amount;
-        locker.rewardAllowed = _rewardAllowed;
-        locker.rewardDebt = _rewardDebt;
-        locker.distributed = _distributed;
-        locker.unlockAmount = _unlockAmount;
-        locker.unlockTime = _unlockTime;
     }
 
 }
