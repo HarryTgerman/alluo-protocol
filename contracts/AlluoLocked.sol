@@ -2,13 +2,13 @@
 pragma solidity 0.8.4;
 import "hardhat/console.sol";
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract AlluoLocked is
     Initializable,
@@ -18,6 +18,7 @@ contract AlluoLocked is
     PausableUpgradeable
 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
+    using AddressUpgradeable for address;
 
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -31,7 +32,6 @@ contract AlluoLocked is
     uint256 public rewardPerDistribution;
     // Locking's start time.
     uint256 public startTime;
-
     // Locking's reward distribution time.
     uint256 public distributionTime;
     // Amount of currently locked tokens from all users.
@@ -45,16 +45,20 @@ contract AlluoLocked is
     uint256 public allProduced;
     // Аuxiliary parameter for locking's math
     uint256 public producedTime;
-    //period of locking after lock call
+
+    //period of locking after lock function call
     uint256 public depositLockDuration;
-    //period of locking after unlock call
+    //period of locking after unlock function call
     uint256 public withdrawLockDuration;
+
 
     struct AdditionalLockInfo{
         // Amount of locked tokens waiting for withdraw.
         uint256 waitingForWithdrawal;
         // Amount of currently claimed rewards by the users.
         uint256  totalDistributed;
+        //
+        bool upgradeStatus;
     }
 
     AdditionalLockInfo private additionalLockInfo;
@@ -131,12 +135,13 @@ contract AlluoLocked is
         internal
         override
         onlyRole(UPGRADER_ROLE)
-    {}
+    { require(additionalLockInfo.upgradeStatus, "Upgrade not allowed");}
 
     /**
      * @dev Contract constructor 
      */
     function initialize(
+        address _multiSigWallet,
         uint256 _rewardPerDistribution,
         uint256 _startTime,
         uint256 _distributionTime,
@@ -148,8 +153,12 @@ contract AlluoLocked is
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _setupRole(ADMIN_ROLE, msg.sender);
+        require(_multiSigWallet.isContract(), "Locking: not contract");
+
+        _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(DEFAULT_ADMIN_ROLE, _multiSigWallet);
+        _setupRole(ADMIN_ROLE, _multiSigWallet);
+        _setupRole(UPGRADER_ROLE, _multiSigWallet);
 
         token = TokenInfo({
             name: "Vote Locked Alluo Token",
@@ -267,6 +276,7 @@ contract AlluoLocked is
         additionalLockInfo.waitingForWithdrawal += _amount;
 
         locker.unlockAmount += _amount;
+        locker.depositUnlockTime = 0;
         locker.withdrawUnlockTime = block.timestamp + withdrawLockDuration;
 
         emit TokensUnlocked(_amount, block.timestamp, msg.sender);
@@ -299,6 +309,7 @@ contract AlluoLocked is
         additionalLockInfo.waitingForWithdrawal += amount;
 
         locker.unlockAmount += amount;
+        locker.depositUnlockTime = 0;
         locker.withdrawUnlockTime = block.timestamp + withdrawLockDuration;
 
         emit TokensUnlocked(amount, block.timestamp, msg.sender);
@@ -307,12 +318,12 @@ contract AlluoLocked is
     /**
      * @dev Unlocks unbinded tokens and transfers them to locker's address
      */
-    function withdraw() public nonReentrant {
+    function withdraw() public whenNotPaused nonReentrant {
         Locker storage locker = _lockers[msg.sender];
 
         require(
             locker.unlockAmount > 0,
-            "Locking: Not enough tokens to unlock"
+            "Locking: Not enough tokens to withdraw"
         );
 
         require(
@@ -384,7 +395,7 @@ contract AlluoLocked is
         return reward;
     }
 
-  /**
+    /**
      * @dev Returns locker's available rewards
      * @param _locker Address of the locker
      * @return reward Available reward to claim
@@ -404,7 +415,7 @@ contract AlluoLocked is
     }
 
     /**
-     * @dev Returns information about the specified locker
+     * @dev Returns balance of the specified locker
      * @param _address Locker's address
      * @return amount of vote/locked tokens
      */
@@ -412,6 +423,19 @@ contract AlluoLocked is
         return _lockers[_address].amount;
     }
 
+    /**
+     * @dev Returns balance of the specified locker
+     * @param _address Locker's address
+     * @return amount of unlocked tokens
+     */
+    function unlockedBalanceOf(address _address) external view  returns(uint256 amount) {
+        return _lockers[_address].unlockAmount;
+    }
+
+    /**
+     * @dev Returns total amount of tokens
+     * @return amount of locked and unlocked tokens
+     */
     function totalSupply() external view  returns(uint256 amount) {
         return totalLocked + additionalLockInfo.waitingForWithdrawal;
     }
@@ -420,27 +444,30 @@ contract AlluoLocked is
      * @dev Returns information about the specified locker
      * @param _address Locker's address
      * @return locked_ Locked amount of tokens
-     * @return claim_  Reward amount available to be claimed
      * @return unlockAmount_ Unlocked amount of tokens
-     * @return unlockTime_ Timestamp when tokens were unlocked
+     * @return claim_  Reward amount available to be claimed
+     * @return depositUnlockTime_ Timestamp when tokens will be available to unlock
+     * @return withdrawUnlockTime_ Timestamp when tokens will be available to withdraw
      */
     function getInfoByAddress(address _address)
         external
         view
         returns (
             uint256 locked_,
-            uint256 claim_,
             uint256 unlockAmount_,
-            uint256 unlockTime_
+            uint256 claim_,
+            uint256 depositUnlockTime_,
+            uint256 withdrawUnlockTime_
         )
     {
         Locker storage locker = _lockers[_address];
         locked_ = locker.amount;
         unlockAmount_ = locker.unlockAmount;
-        unlockTime_ = locker.withdrawUnlockTime;
+        depositUnlockTime_ = locker.depositUnlockTime;
+        withdrawUnlockTime_ = locker.withdrawUnlockTime;
         claim_ = getClaim(_address);
 
-        return (locked_, claim_, unlockAmount_, unlockTime_);
+        return (locked_, unlockAmount_, claim_, depositUnlockTime_, withdrawUnlockTime_);
     }
 
     /* ========== ADMIN CONFIGURATION ========== */
@@ -476,6 +503,39 @@ contract AlluoLocked is
         producedTime = block.timestamp;
         rewardPerDistribution = _amount;
         emit RewardAmountUpdated(_amount, allProduced);
+    }
+
+    /**
+     * @dev Allows to update the time when the reward are available to withdraw 
+     * @param _withdrawLockDuration Date in unix timestamp format
+     */
+    function updateWithdrawLockDuration(uint256 _withdrawLockDuration)
+        external
+        onlyRole(ADMIN_ROLE)
+    {
+        withdrawLockDuration = _withdrawLockDuration;
+    }
+
+    /**
+     * @dev Allows to update the time when the reward are available to unlock 
+     * @param _depositLockDuration Date in unix timestamp format
+     */
+    function updateDepositLockDuration(uint256 _depositLockDuration)
+        external
+        onlyRole(ADMIN_ROLE)
+    {
+        depositLockDuration = _depositLockDuration;
+    }
+
+    /**
+     * @dev Removes any token from the contract by its address
+     * @param _status An amount to be removed from the contract
+     */
+    function changeUpgradeStatus(bool _status)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        additionalLockInfo.upgradeStatus = _status;
     }
 
     /**

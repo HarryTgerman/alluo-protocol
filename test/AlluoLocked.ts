@@ -41,7 +41,6 @@ describe("Locking contract", function () {
 
     beforeEach(async function () {
         startTime = await getTimestamp() + 150;
-        //console.log("startTime: " + startTime);
 
         addr = await ethers.getSigners();
 
@@ -51,9 +50,9 @@ describe("Locking contract", function () {
 
         Locker = await ethers.getContractFactory("AlluoLocked");
 
-
         locker = await upgrades.deployProxy(Locker,
-            [rewardPerDistribution,
+            [addr[0].address,
+            rewardPerDistribution,
             startTime,
             distrbutionTime,
             lockingToken.address,
@@ -94,19 +93,48 @@ describe("Locking contract", function () {
 
             await locker.update();
             await locker.connect(addr[1]).lock(parseEther("1000"));
-            await skipDays(8);
+            await skipDays(7);
 
-            await expect(locker.connect(addr[1]).withdraw()
-            ).to.be.revertedWith("Locking: Not enough tokens to unlock");
-            await expect(locker.connect(addr[2]).unlockAll()
-            ).to.be.revertedWith("Locking: Not enough tokens to unlock");
+            await locker.connect(addr[1]).unlockAll();
+            await skipDays(5);
 
-            await locker.connect(addr[1]).claimAndUnlock();
+            await locker.connect(addr[1]).withdraw();
+        });
+        it("Should not allow unlock and withdraw before the lock time expires", async function () {
+            await shiftToStart();
+
+            await locker.update();
+            await locker.connect(addr[1]).lock(parseEther("1000"));
+            await locker.connect(addr[2]).lock(parseEther("1000"));
+            await skipDays(5);
+
+            await expect(locker.connect(addr[1]).unlockAll()
+            ).to.be.revertedWith("Locking: Locked tokens are not available yet");
+            await expect(locker.connect(addr[2]).unlock(parseEther("500"))
+            ).to.be.revertedWith("Locking: Locked tokens are not available yet");
+            await skipDays(2);
+
+            await locker.connect(addr[1]).unlockAll();
             
             await expect(locker.connect(addr[1]).withdraw()
             ).to.be.revertedWith("Locking: Unlocked tokens are not available yet");
 
-            await skipDays(6);
+            await skipDays(5);
+            await locker.connect(addr[1]).withdraw();
+        });
+        it("Should not allow withdraw not unlocked tokens", async function () {
+            await shiftToStart();
+
+            await locker.update();
+            await locker.connect(addr[1]).lock(parseEther("1000"));
+            await skipDays(7);
+
+            await expect(locker.connect(addr[1]).withdraw()
+            ).to.be.revertedWith("Locking: Not enough tokens to withdraw");
+
+            await locker.connect(addr[1]).unlockAll();
+            await skipDays(5);
+
             await locker.connect(addr[1]).withdraw();
         });
         it("Should allow unlock specified amount", async function () {
@@ -123,6 +151,14 @@ describe("Locking contract", function () {
 
         });
 
+        it("Should allow to unlock and claim at the same time", async function () {
+            await shiftToStart();
+
+            await locker.connect(addr[1]).lock(parseEther("1000"));
+            await skipDays(7);
+            
+            await locker.connect(addr[1]).claimAndUnlock();
+        });
         it("Should not allow unlock amount higher then locked", async function () {
             await shiftToStart();
 
@@ -132,6 +168,10 @@ describe("Locking contract", function () {
             await expect(locker.connect(addr[1]).unlock(parseEther("1500"))
             ).to.be.revertedWith("Locking: Not enough tokens to unlock");
 
+            await locker.connect(addr[1]).unlock(parseEther("1000"))
+            
+            await expect(locker.connect(addr[1]).unlockAll()
+            ).to.be.revertedWith("Locking: Not enough tokens to unlock");
         });
 
         it("Should not allow claim 0 amount", async function () {
@@ -140,8 +180,7 @@ describe("Locking contract", function () {
             ).to.be.revertedWith("Locking: Nothing to claim");
         });
 
-
-        it("Should return right amount locked tokens after lock/unlock", async function () {
+        it("Should return right total amount locked tokens after user lock/unlock", async function () {
             await shiftToStart();
 
             let amount = parseEther("1000");
@@ -150,17 +189,33 @@ describe("Locking contract", function () {
             await skipDays(7);
             expect(await locker.balanceOf(addr[1].address)).to.equal(amount);
 
-            amount = parseEther("500")
-            await locker.connect(addr[1]).unlock(amount);
+            await locker.connect(addr[1]).unlock(parseEther("500"));
 
-            expect(await locker.totalSupply()).to.equal(parseEther("1000"));
+            expect(await locker.unlockedBalanceOf(addr[1].address)).to.equal(parseEther("500"));
 
+            expect(await locker.totalSupply()).to.equal(amount);
+
+        });
+
+        it("Should return right full info about locker", async function () {
+            await shiftToStart();
+
+            let amount = parseEther("1000");
+
+            await locker.connect(addr[1]).lock(amount);
+            await skipDays(7);
+
+            await locker.connect(addr[1]).unlock(parseEther("400"));
             
-            expect(await locker.balanceOf(addr[1].address)).to.equal(amount);
-
-            await skipDays(15);
-            await locker.connect(addr[1]).withdraw();
-            expect(await locker.balanceOf(addr[1].address)).to.equal(amount);
+            let [locked, unlocked, forClaim, depositUnlockTime, withdrawUnlockTime] = await locker.getInfoByAddress(addr[1].address)
+            expect(locked).to.equal(parseEther("600"));
+            expect(unlocked).to.equal(parseEther("400"));
+            expect(forClaim).to.be.gt(parseEther("604800"));
+            expect(forClaim).to.be.lt(parseEther("604803"));
+            expect(depositUnlockTime).to.equal(0);
+            expect(withdrawUnlockTime).to.gt(startTime + 86400*12);
+            expect(withdrawUnlockTime).to.lt(startTime + 86400*12 + 120);
+            
         });
 
     });
@@ -177,7 +232,7 @@ describe("Locking contract", function () {
             //console.log(claim.toString());
 
             expect(claim).to.be.gt(parseEther("86400"));
-            expect(claim).to.be.lt(parseEther("86402"));
+            expect(claim).to.be.lt(parseEther("86403"));
 
             await skipDays(1);
 
@@ -188,7 +243,7 @@ describe("Locking contract", function () {
             expect(claim).to.be.gt(parseEther("172800"));
             expect(claim).to.be.lt(parseEther("172804")); 
         });
-        it("If there are two lockers rewards are distributed between them", async function () {
+        it("If there are two lockers lock at the same time rewards are distributed between them equally", async function () {
   
             await shiftToStart();
 
@@ -209,7 +264,59 @@ describe("Locking contract", function () {
             //console.log(claim.toString());
 
             expect(claim).to.be.gt(parseEther("86400"));
-            expect(claim).to.be.lt(parseEther("86401"));
+            expect(claim).to.be.lt(parseEther("86403"));
+        });
+        it("If there are two lockers the rewards are distributed in proportion to their share", async function () {
+            await shiftToStart();
+            await locker.setReward(parseEther("100000"))
+  
+            await locker.connect(addr[1]).lock(parseEther("1000"));
+            await skipDays(1);
+            let claim1 = await locker.getClaim(addr[1].address);
+            expect(claim1).to.be.gt(parseEther("100000"));
+            expect(claim1).to.be.lt(parseEther("100003"));
+
+            await locker.connect(addr[2]).lock(parseEther("2000"));
+
+            await skipDays(1);
+            claim1 = await locker.getClaim(addr[1].address);
+            let claim2 = await locker.getClaim(addr[2].address);
+            expect(claim1).to.be.gt(parseEther("133332"));
+            expect(claim1).to.be.lt(parseEther("133337"));
+
+
+            expect(claim2).to.be.gt(parseEther("66665"));
+            expect(claim2).to.be.lt(parseEther("66668"));
+
+        });
+        it("At the begining set reward to 0 and then change back", async function () {
+            await shiftToStart();
+            await locker.setReward(0)
+  
+            await locker.connect(addr[1]).lock(parseEther("1000"));
+            await skipDays(10);
+            let claim1 = await locker.getClaim(addr[1].address);
+            expect(claim1).to.be.lt(parseEther("2"));
+
+            await locker.setReward(parseEther("100000"))
+            await skipDays(1);
+
+            claim1 = await locker.getClaim(addr[1].address);
+            expect(claim1).to.be.gt(parseEther("100000"));
+            expect(claim1).to.be.lt(parseEther("100003"));
+
+            await locker.connect(addr[2]).lock(parseEther("2000"));
+
+            await skipDays(1);
+            claim1 = await locker.getClaim(addr[1].address);
+            let claim2 = await locker.getClaim(addr[2].address);
+            expect(claim1).to.be.gt(parseEther("133332"));
+            expect(claim1).to.be.lt(parseEther("133337"));
+
+
+            expect(claim2).to.be.gt(parseEther("66665"));
+            expect(claim2).to.be.lt(parseEther("66668"));
+
         });
         it("Full cycle with 4 lockers, different amount and time", async function () {
   
@@ -220,7 +327,7 @@ describe("Locking contract", function () {
             // 2 day
             let claim = await locker.getClaim(addr[1].address);
             expect(claim).to.be.gt(parseEther("86400"));
-            expect(claim).to.be.lt(parseEther("86402"));
+            expect(claim).to.be.lt(parseEther("86403"));
 
             await locker.connect(addr[2]).lock(parseEther("2000"));
             await skipDays(1);
@@ -264,6 +371,27 @@ describe("Locking contract", function () {
             
         });
 
+    });
+    describe("Admin functions and pause", function () {
+        it("Should not allow interaction with the contract on pause", async function () {
+            await shiftToStart();
+            // 1 day
+            await locker.connect(addr[1]).lock(parseEther("1000"));
+            await skipDays(7);
+            await locker.connect(addr[1]).unlock(parseEther("500"));
+            await locker.pause()
+
+            await expect(locker.connect(addr[1]).unlockAll()
+            ).to.be.revertedWith("Pausable: paused");
+            await expect(locker.connect(addr[1]).claim()
+            ).to.be.revertedWith("Pausable: paused");
+            await expect(locker.connect(addr[1]).lock(parseEther("500"))
+            ).to.be.revertedWith("Pausable: paused");
+            await skipDays(5);
+            await expect(locker.connect(addr[1]).withdraw()
+            ).to.be.revertedWith("Pausable: paused");
+            await locker.unpause()
+        });
     });
 
 });
