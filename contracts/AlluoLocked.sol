@@ -21,7 +21,6 @@ contract AlluoLocked is
     using AddressUpgradeable for address;
 
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     // ERC20 token locking to the contract.
     IERC20Upgradeable public lockingToken;
@@ -57,7 +56,7 @@ contract AlluoLocked is
         uint256 waitingForWithdrawal;
         // Amount of currently claimed rewards by the users.
         uint256  totalDistributed;
-        //
+        // flag for allowing upgrade
         bool upgradeStatus;
     }
 
@@ -157,7 +156,6 @@ contract AlluoLocked is
 
         _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(DEFAULT_ADMIN_ROLE, _multiSigWallet);
-        _setupRole(ADMIN_ROLE, _multiSigWallet);
         _setupRole(UPGRADER_ROLE, _multiSigWallet);
 
         token = TokenInfo({
@@ -460,7 +458,7 @@ contract AlluoLocked is
             uint256 withdrawUnlockTime_
         )
     {
-        Locker storage locker = _lockers[_address];
+        Locker memory locker = _lockers[_address];
         locked_ = locker.amount;
         unlockAmount_ = locker.unlockAmount;
         depositUnlockTime_ = locker.depositUnlockTime;
@@ -473,12 +471,12 @@ contract AlluoLocked is
     /* ========== ADMIN CONFIGURATION ========== */
 
     ///@dev Pauses the locking
-    function pause() external onlyRole(ADMIN_ROLE) {
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
 
     ///@dev Unpauses the locking
-    function unpause() external onlyRole(ADMIN_ROLE) {
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
 
@@ -498,7 +496,7 @@ contract AlluoLocked is
      * @dev Sets amount of reward during `distributionTime`
      * @param _amount Sets total reward amount per `distributionTime`
      */
-    function setReward(uint256 _amount) external onlyRole(ADMIN_ROLE) {
+    function setReward(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         allProduced = produced();
         producedTime = block.timestamp;
         rewardPerDistribution = _amount;
@@ -511,7 +509,7 @@ contract AlluoLocked is
      */
     function updateWithdrawLockDuration(uint256 _withdrawLockDuration)
         external
-        onlyRole(ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         withdrawLockDuration = _withdrawLockDuration;
     }
@@ -522,14 +520,14 @@ contract AlluoLocked is
      */
     function updateDepositLockDuration(uint256 _depositLockDuration)
         external
-        onlyRole(ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         depositLockDuration = _depositLockDuration;
     }
 
     /**
-     * @dev Removes any token from the contract by its address
-     * @param _status An amount to be removed from the contract
+     * @dev allows and prohibits to upgrade contract
+     * @param _status flag for allowing upgrade from gnosis
      */
     function changeUpgradeStatus(bool _status)
         external
@@ -545,7 +543,7 @@ contract AlluoLocked is
      */
     function removeTokenByAddress(address _address, uint256 _amount)
         external
-        onlyRole(ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         require(_address != address(0), "Invalid token address");
         IERC20Upgradeable(_address).safeTransfer(msg.sender, _amount);
