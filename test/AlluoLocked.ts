@@ -5,7 +5,7 @@ import { Contract, ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { parseEther } from "@ethersproject/units";
 import { keccak256 } from "ethers/lib/utils";
-import { AlluoLocked, AlluoToken } from '../typechain';
+import { AlluoLocked, AlluoToken, PseudoMultisigWallet } from '../typechain';
 
 import { Event } from "@ethersproject/contracts";
 
@@ -13,6 +13,9 @@ import { Event } from "@ethersproject/contracts";
 let Token: ContractFactory;
 let lockingToken: AlluoToken;
 let rewardToken: AlluoToken;
+
+let Multisig: ContractFactory;
+let multisig: PseudoMultisigWallet;
 
 let Locker: ContractFactory;
 let locker: AlluoLocked;
@@ -48,10 +51,13 @@ describe("Locking contract", function () {
         lockingToken = await Token.deploy(addr[0].address) as AlluoToken;
         rewardToken = await Token.deploy(addr[0].address) as AlluoToken;
 
+        Multisig = await ethers.getContractFactory("PseudoMultisigWallet");
+        multisig = await Multisig.deploy() as PseudoMultisigWallet;
+
         Locker = await ethers.getContractFactory("AlluoLocked");
 
         locker = await upgrades.deployProxy(Locker,
-            [addr[0].address,
+            [multisig.address,
             rewardPerDistribution,
             startTime,
             distrbutionTime,
@@ -268,13 +274,20 @@ describe("Locking contract", function () {
         });
         it("If there are two lockers the rewards are distributed in proportion to their share", async function () {
             await shiftToStart();
-            await locker.setReward(parseEther("100000"))
+
+            let ABI = ["function setReward(uint256 _amounts)"];
+            let iface = new ethers.utils.Interface(ABI);
+            const calldata = iface.encodeFunctionData("setReward", [parseEther("100000")]);
+    
+            await multisig.executeCall(locker.address, calldata);
+
+            //await locker.connect(multisig).setReward(parseEther("100000"))
   
             await locker.connect(addr[1]).lock(parseEther("1000"));
             await skipDays(1);
             let claim1 = await locker.getClaim(addr[1].address);
             expect(claim1).to.be.gt(parseEther("100000"));
-            expect(claim1).to.be.lt(parseEther("100003"));
+            expect(claim1).to.be.lt(parseEther("100004"));
 
             await locker.connect(addr[2]).lock(parseEther("2000"));
 
@@ -282,7 +295,7 @@ describe("Locking contract", function () {
             claim1 = await locker.getClaim(addr[1].address);
             let claim2 = await locker.getClaim(addr[2].address);
             expect(claim1).to.be.gt(parseEther("133332"));
-            expect(claim1).to.be.lt(parseEther("133337"));
+            expect(claim1).to.be.lt(parseEther("133338"));
 
 
             expect(claim2).to.be.gt(parseEther("66665"));
@@ -291,14 +304,25 @@ describe("Locking contract", function () {
         });
         it("At the begining set reward to 0 and then change back", async function () {
             await shiftToStart();
-            await locker.setReward(0)
+
+            let ABI = ["function setReward(uint256 _amounts)"];
+            let iface = new ethers.utils.Interface(ABI);
+            let calldata = iface.encodeFunctionData("setReward", [0]);
+    
+            await multisig.executeCall(locker.address, calldata);
   
             await locker.connect(addr[1]).lock(parseEther("1000"));
             await skipDays(10);
             let claim1 = await locker.getClaim(addr[1].address);
             expect(claim1).to.be.lt(parseEther("2"));
 
-            await locker.setReward(parseEther("100000"))
+
+            ABI = ["function setReward(uint256 _amounts)"];
+            iface = new ethers.utils.Interface(ABI);
+            calldata = iface.encodeFunctionData("setReward", [parseEther("100000")]);
+    
+            await multisig.executeCall(locker.address, calldata);
+
             await skipDays(1);
 
             claim1 = await locker.getClaim(addr[1].address);
@@ -375,11 +399,16 @@ describe("Locking contract", function () {
     describe("Admin functions and pause", function () {
         it("Should not allow interaction with the contract on pause", async function () {
             await shiftToStart();
-            // 1 day
+
             await locker.connect(addr[1]).lock(parseEther("1000"));
             await skipDays(7);
             await locker.connect(addr[1]).unlock(parseEther("500"));
-            await locker.pause()
+
+            let ABI = ["function pause()"];
+            let iface = new ethers.utils.Interface(ABI);
+            let calldata = iface.encodeFunctionData("pause", []);
+    
+            await multisig.executeCall(locker.address, calldata);
 
             await expect(locker.connect(addr[1]).unlockAll()
             ).to.be.revertedWith("Pausable: paused");
@@ -390,7 +419,14 @@ describe("Locking contract", function () {
             await skipDays(5);
             await expect(locker.connect(addr[1]).withdraw()
             ).to.be.revertedWith("Pausable: paused");
-            await locker.unpause()
+
+            
+            ABI = ["function unpause()"];
+            iface = new ethers.utils.Interface(ABI);
+            calldata = iface.encodeFunctionData("unpause", []);
+    
+            await multisig.executeCall(locker.address, calldata);
+
         });
     });
 
