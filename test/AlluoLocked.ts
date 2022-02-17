@@ -9,7 +9,6 @@ import { AlluoLocked, AlluoToken, PseudoMultisigWallet } from '../typechain';
 
 import { Event } from "@ethersproject/contracts";
 
-
 let Token: ContractFactory;
 let lockingToken: AlluoToken;
 let rewardToken: AlluoToken;
@@ -224,6 +223,48 @@ describe("Locking contract", function () {
             
         });
 
+    });
+    describe("Migration", function () {
+        it("Should allow turn on migration by admin but not by others", async function () {
+  
+            await shiftToStart();
+
+            // await expect(locker.connect(addr[1]).changeMigrationStatus(true)
+            // ).to.be.reverted();
+
+            let ABI = ["function changeMigrationStatus(bool _status)"];
+            let iface = new ethers.utils.Interface(ABI);
+            const calldata = iface.encodeFunctionData("changeMigrationStatus", [true]);
+    
+            await multisig.executeCall(locker.address, calldata);
+
+        });
+
+        it("Should allow withdraw all funds when migration is on", async function () {
+  
+            await shiftToStart();
+
+            console.log(await lockingToken.balanceOf(addr[1].address));
+            console.log(await rewardToken.balanceOf(addr[1].address));
+
+            await locker.connect(addr[1]).lock(parseEther("1000"));
+            await skipDays(1);
+
+            let ABI = ["function changeMigrationStatus(bool _status)"];
+            let iface = new ethers.utils.Interface(ABI);
+            const calldata = iface.encodeFunctionData("changeMigrationStatus", [true]);
+            
+            console.log(await lockingToken.balanceOf(addr[1].address));
+            console.log(await rewardToken.balanceOf(addr[1].address));
+    
+            await multisig.executeCall(locker.address, calldata);
+
+            await locker.connect(addr[1]).migrate();
+
+            console.log(await lockingToken.balanceOf(addr[1].address));
+            console.log(await rewardToken.balanceOf(addr[1].address));
+
+        });
     });
     describe("Reward calculation", function () {
 

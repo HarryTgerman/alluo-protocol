@@ -58,6 +58,8 @@ contract AlluoLocked is
         uint256  totalDistributed;
         // flag for allowing upgrade
         bool upgradeStatus;
+        // flag for allowing migrate
+        bool migrationStatus;
     }
 
     AdditionalLockInfo private additionalLockInfo;
@@ -537,16 +539,34 @@ contract AlluoLocked is
     }
 
     /**
-     * @dev Removes any token from the contract by its address
-     * @param _address Token's address
-     * @param _amount An amount to be removed from the contract
+     * @dev allows and prohibits to migrate money from contract
+     * for user
+     * @param _status flag for allowing upgrade from gnosis
      */
-    function removeTokenByAddress(address _address, uint256 _amount)
+    function changeMigrationStatus(bool _status)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(_address != address(0), "Invalid token address");
-        IERC20Upgradeable(_address).safeTransfer(msg.sender, _amount);
+        additionalLockInfo.migrationStatus = _status;
     }
 
+    /**
+     * @dev Withdrawing all tokens from the contract by user
+     * if migration allowed
+     */
+    function migrate() external {
+        require(additionalLockInfo.migrationStatus, "migration not allowed");
+        Locker storage locker = _lockers[msg.sender];
+        locker.depositUnlockTime = 0;
+        if(locker.amount > 0){
+            unlockAll();
+        }
+        if (getClaim(msg.sender) > 0) {
+            claim();
+        }
+        locker.withdrawUnlockTime = 0;
+        if(locker.unlockAmount != 0){
+            withdraw();
+        }
+    }
 }
