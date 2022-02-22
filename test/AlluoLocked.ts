@@ -244,9 +244,6 @@ describe("Locking contract", function () {
   
             await shiftToStart();
 
-            console.log(await lockingToken.balanceOf(addr[1].address));
-            console.log(await rewardToken.balanceOf(addr[1].address));
-
             await locker.connect(addr[1]).lock(parseEther("1000"));
             await skipDays(1);
 
@@ -254,16 +251,9 @@ describe("Locking contract", function () {
             let iface = new ethers.utils.Interface(ABI);
             const calldata = iface.encodeFunctionData("changeMigrationStatus", [true]);
             
-            console.log(await lockingToken.balanceOf(addr[1].address));
-            console.log(await rewardToken.balanceOf(addr[1].address));
-    
             await multisig.executeCall(locker.address, calldata);
 
             await locker.connect(addr[1]).migrate();
-
-            console.log(await lockingToken.balanceOf(addr[1].address));
-            console.log(await rewardToken.balanceOf(addr[1].address));
-
         });
     });
     describe("Reward calculation", function () {
@@ -429,11 +419,19 @@ describe("Locking contract", function () {
             //console.log((await locker.getClaim(addr[1].address)).toString());
             await skipDays(2);
             //end of 10 day
-            console.log((await locker.getClaim(addr[1].address)).toString());
-            console.log((await locker.getClaim(addr[2].address)).toString());
-            console.log((await locker.getClaim(addr[3].address)).toString());
-            console.log((await locker.getClaim(addr[4].address)).toString());
-            
+
+            expect(await locker.getClaim(addr[1].address)).to.be.lt(parseEther("210414"));
+            expect(await locker.getClaim(addr[1].address)).to.be.gt(parseEther("210411")); 
+
+            expect(await locker.getClaim(addr[2].address)).to.be.lt(parseEther("203622"));
+            expect(await locker.getClaim(addr[2].address)).to.be.gt(parseEther("203618")); 
+
+            expect(await locker.getClaim(addr[3].address)).to.be.lt(parseEther("128976"));
+            expect(await locker.getClaim(addr[3].address)).to.be.gt(parseEther("128972")); 
+
+            expect(await locker.getClaim(addr[4].address)).to.be.lt(parseEther("321002"));
+            expect(await locker.getClaim(addr[4].address)).to.be.gt(parseEther("320998")); 
+
         });
 
     });
