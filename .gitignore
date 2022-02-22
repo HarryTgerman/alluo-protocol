@@ -1,4 +1,5 @@
 node_modules
+.openzeppelin
 .env
 .env-rinkeby
 coverage
