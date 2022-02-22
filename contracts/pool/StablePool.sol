@@ -119,12 +119,12 @@ contract StablePool is AccessControl, ReentrancyGuard{
             try FarmingVault(farmingVaultAddress).callStrategiesForHelp(remains) {
                 //emit SuccessEvent();
             } catch Error(string memory revertReason) {
-                if(keccak256(abi.encodePacked(revertReason)) == keccak256(abi.encodePacked("AutofarmStrategy: not enough LP"))){
-                    callDaoForHelp(remains);
-                }
-                else{
-                    revert("something went wrong");
-                }
+                // if(keccak256(abi.encodePacked(revertReason)) == keccak256(abi.encodePacked("AutofarmStrategy: not enough LP"))){
+                //     callDaoForHelp(remains);
+                // }
+                // else{
+                //     revert("something went wrong");
+                // }
             }
             }
             else{
