@@ -10,32 +10,6 @@ import 'hardhat-contract-sizer'
 import "./tasks"
 dotenv.config();
 
-//       From Alluo Smart Contract Developers - Happy New Year!!!
-//
-//                                  |
-//                                \ ' /
-//                              -- (*) --
-//                                 >*<
-//                                >0<@<
-//                               >>>@<<*
-//                              >@>*<0<<<
-//                             >*>>@<<<@<<
-//                            >@>>0<<<*<<@<
-//                           >*>>0<<@<<<@<<<
-//                          >@>>*<<@<>*<<0<*<
-//            \*/          >0>>*<<@<>0><<*<@<<
-//        ___\\U//___     >*>>@><0<<*>>@><*<0<<
-//        |\\ | | \\|    >@>>0<*<0>>@<<0<<<*<@<<  
-//        | \\| | _(UU)_ >((*))_>0><*<0><@<<<0<*<
-//        |\ \| || / //||.*.*.*.|>>@<<*<<@>><0<<<
-//        |\\_|_|&&_// ||*.*.*.*|_\\db//_               
-//        """"|'.'.'.|~~|.*.*.*|     ____|_
-//            |'.'.'.|   ^^^^^^|____|>>>>>>|
-//            ~~~~~~~~         '""""`------'
-
-
-// You need to export an object to set up your config
-// Go to https://hardhat.org/config/ to learn more
 
 const config: HardhatUserConfig = {
   solidity: {
