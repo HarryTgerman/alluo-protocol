@@ -29,10 +29,10 @@ const config: HardhatUserConfig = {
       accounts: {
         mnemonic: process.env.MNEMONIC,
       },
-      forking: {
-        url: "https://polygon-mainnet.g.alchemy.com/v2/6QuVBlBaST7y0SX7yjMc5kQjiT5HumAW",
-        blockNumber: 20094469
-      },
+      // forking: {
+      //   url: "https://polygon-mainnet.g.alchemy.com/v2/6QuVBlBaST7y0SX7yjMc5kQjiT5HumAW",
+      //   blockNumber: 20094469
+      // },
     },
     ropsten: {
       url: process.env.ROPSTEN_URL || "",

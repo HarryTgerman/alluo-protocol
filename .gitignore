@@ -1,5 +1,6 @@
 node_modules
-.openzeppelin
+.openzeppelin/unknown-*.json
+.vscode
 .env
 .env-rinkeby
 coverage

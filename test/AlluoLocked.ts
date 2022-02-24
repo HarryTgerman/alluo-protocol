@@ -50,6 +50,8 @@ describe("Locking contract", function () {
         lockingToken = await Token.deploy(addr[0].address) as AlluoToken;
         rewardToken = await Token.deploy(addr[0].address) as AlluoToken;
 
+        
+
         Multisig = await ethers.getContractFactory("PseudoMultisigWallet");
         multisig = await Multisig.deploy() as PseudoMultisigWallet;
 
